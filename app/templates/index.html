@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Maritime Event Detection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f7f7f7; color: #111; }
+    header { padding: 16px 20px; background: #0b1f33; color: white; }
+    .small { font-size: 12px; color: #444; }
+
+    .topGrid {
+      display: grid;
+      grid-template-columns: minmax(700px, 1.1fr) minmax(560px, 1fr);
+      gap: 16px;
+      padding: 16px 16px 0 16px;
+      align-items: start;
+    }
+    .topGrid > .panel:first-child { min-width: 0; }
+    .bottomRow { padding: 16px; }
+
+    .panel { background: white; border-radius: 10px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .legendRow { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:10px; font-size:12px; }
+    .legendItem { display:flex; align-items:center; gap:6px; }
+    .swatch { width:12px; height:12px; border-radius:50%; display:inline-block; }
+
+    .coordBox {
+      margin-bottom: 14px;
+      padding: 16px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      background: #f8fafc;
+      font-size: 18px;
+      line-height: 1.7;
+      font-weight: 500;
+      font-family: "Courier New", monospace;
+    }
+
+    .tableWrap { overflow: visible; width: 100%; }
+    #eventTable { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: 12px; }
+    #eventTable th, #eventTable td {
+      border-bottom: 1px solid #eee;
+      padding: 6px;
+      text-align: left;
+      vertical-align: top;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+    #eventTable th:nth-child(1), #eventTable td:nth-child(1) { width: 90px; }
+    #eventTable th:nth-child(2), #eventTable td:nth-child(2) { width: 130px; }
+    #eventTable th:nth-child(3), #eventTable td:nth-child(3) { width: 120px; }
+    #eventTable th:nth-child(4), #eventTable td:nth-child(4) { width: 135px; }
+    #eventTable th:nth-child(5), #eventTable td:nth-child(5) { width: auto; }
+
+    .activeRow { background: #fff7db; }
+    .dimRow { opacity: 0.65; }
+    .reportHint { margin-top: 10px; font-size: 12px; color: #555; }
+    .controls { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 12px; }
+    label { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
+    input, button { padding: 6px 8px; font-size: 13px; }
+
+    #mapWrap { position: relative; }
+    #map { width: 100%; height: 820px; border: 1px solid #ddd; border-radius: 8px; background: #eef6ff; }
+    #centerAlert {
+      position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+      z-index: 20; display: none; padding: 10px 14px; border-radius: 10px;
+      background: rgba(176,0,32,0.95); color: white; font-weight: 700;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.22); pointer-events: none;
+    }
+    #centerAlert.alertFlashOn {
+      opacity: 1 !important;
+      box-shadow: 0 0 18px rgba(255,0,40,0.95) !important;
+    }
+    #centerAlert.alertFlashOff {
+      opacity: 0.18 !important;
+      box-shadow: 0 0 2px rgba(255,0,40,0.35) !important;
+    }
+
+    .mapMeta { margin-top: 8px; font-size: 12px; color: #444; }
+    .notice { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #fff7db; border: 1px solid #ecd48a; font-size: 12px; }
+    .resetBtn {
+      position: absolute; right: 14px; top: 14px; z-index: 21; background: white;
+      border: 1px solid #ccc; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    }
+
+    pre { white-space: pre-wrap; font-size: 12px; background: #fafafa; padding: 10px; border-radius: 8px; border: 1px solid #eee; max-height: 260px; overflow: auto; }
+
+    #apiModal, #reportPromptModal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none;
+      align-items: center; justify-content: center; z-index: 1000;
+    }
+    #apiModal .modalCard, #reportPromptModal .modalCard {
+      background: white; padding: 20px; border-radius: 12px; width: 380px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+    }
+    #apiError { color: #b00020; font-size: 12px; margin-top: 8px; min-height: 16px; }
+    .topActions { display:flex; gap:8px; margin-top:10px; }
+
+    #reportDrawerOverlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; z-index: 1001;
+    }
+    #reportDrawer {
+      position: fixed; left: 0; right: 0; bottom: 0; height: 72vh; background: white;
+      border-top-left-radius: 16px; border-top-right-radius: 16px;
+      box-shadow: 0 -8px 30px rgba(0,0,0,0.25);
+      transform: translateY(100%); transition: transform 0.25s ease;
+      z-index: 1002; display: flex; flex-direction: column;
+    }
+    #reportDrawer.open { transform: translateY(0); }
+    .drawerHeader { display:flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid #eee; }
+    .drawerBody { padding: 16px; overflow: auto; }
+    .tabs { display:flex; gap:8px; margin-bottom: 12px; }
+    .tabBtn { background: #f3f4f6; border: 1px solid #ddd; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+    .tabBtn.active { background: #0b1f33; color: white; border-color: #0b1f33; }
+    .tabPane { display:none; }
+    .tabPane.active { display:block; }
+
+    .schemaGrid { display:flex; flex-direction:column; gap:0; font-size: 13px; }
+    .schemaRowInteractive { display:grid; grid-template-columns: 150px 1fr; gap: 10px; cursor:pointer; }
+    .schemaLabel, .schemaValue { padding: 10px 0; border-bottom: 1px solid #eee; }
+    .schemaRowInteractive:hover .schemaLabel, .schemaRowInteractive:hover .schemaValue { background:#fafafa; }
+    .schemaFocus .schemaLabel, .schemaFocus .schemaValue { background:#eef6ff; }
+    .schemaPulse .schemaLabel, .schemaPulse .schemaValue { animation: pulseBg 1s ease 2; }
+    @keyframes pulseBg {
+      0% { background:#eef6ff; }
+      50% { background:#d9ecff; }
+      100% { background:#eef6ff; }
+    }
+  
+#centerAlert.alertGreenOn {
+  background: rgba(0,140,60,0.95) !important;
+  color: white !important;
+  opacity: 1 !important;
+  box-shadow: 0 0 18px rgba(0,255,120,0.9) !important;
+}
+
+#centerAlert.alertGreenOff {
+  background: rgba(0,140,60,0.95) !important;
+  color: white !important;
+  opacity: 0.25 !important;
+  box-shadow: 0 0 4px rgba(0,255,120,0.4) !important;
+}
+
+</style>
+</head>
+<body>
+<header>
+  <h1>Maritime Event Detection Near Protected Waters</h1>
+  <div class="small">An app to simulate maritime detection and response.</div>
+</header>
+
+<div class="topGrid">
+  <div class="panel">
+    <h3>Event Table</h3>
+    <div class="legendRow">
+      <div class="legendItem"><span class="swatch" style="background:#ff8800;"></span> Vessel_01</div>
+      <div class="legendItem"><span class="swatch" style="background:#00aa55;"></span> Vessel_02 intruder</div>
+      <div class="legendItem"><span class="swatch" style="background:#2255ff;"></span> Vessel_03</div>
+      <div class="legendItem"><span style="font-size:16px;">🔱</span> Stationary American Submarine</div>
+      <div class="legendItem"><span class="swatch" style="background:#6b7280;"></span> Station Golden Gate boat response</div>
+      <div class="legendItem"><span class="swatch" style="background:#7c3aed;"></span> Air Station SF MH-65 response</div>
+    </div>
+
+    <div id="coordBox" class="coordBox">
+      <b style="font-size:20px;">Live Coordinates</b><br><br>
+      Waiting for playback...
+    </div>
+
+    <div class="tableWrap">
+      <table id="eventTable">
+        <thead>
+          <tr>
+            <th>Record</th>
+            <th>Events</th>
+            <th>Objects</th>
+            <th>Time</th>
+            <th>Interpretation</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="controls">
+      <label>Playback delay per step (ms)
+        <input id="playbackMs" type="number" min="150" max="3000" step="50" value="450">
+      </label>
+      <button id="changeKeyBtn" type="button">Change Google Maps API Key</button>
+    </div>
+    <div class="reportHint">Detection, approach, breach, response launch, inbound pursuit, intercept, non-target clearance, and convergence.</div>
+  </div>
+
+  <div class="panel">
+    <h3>Map View</h3>
+    <div id="mapWrap">
+      <div id="centerAlert"></div>
+      <button class="resetBtn" id="resetViewBtn" type="button">Reset View</button>
+      <div id="map"></div>
+    </div>
+    <div class="mapMeta">Events: The intruder breaches the AOI, triggering a surface interceptor from Station Golden Gate and an MH-65 response from Air Station San Francisco. There was no attack, but interceptors arrive promptly.</div>
+    <div class="notice">Do not Worry! Your Google Maps key is stored only in your browser localStorage and is not written into the app files.</div>
+  </div>
+</div>
+
+<div class="bottomRow">
+  <div class="panel">
+    <h3>Simulation Summary</h3>
+    <div id="summary"></div>
+    <h4>Reasoning Trace</h4>
+    <pre id="trace"></pre>
+  </div>
+</div>
+
+<div id="apiModal">
+  <div class="modalCard">
+    <h3>Enter Google Maps API Key</h3>
+    <div class="small">The key will be saved only in this browser using localStorage.</div>
+    <input id="apiKeyInput" type="text" style="width:100%; margin-top:10px;" placeholder="AIza..." />
+    <div class="topActions">
+      <button id="loadMapBtn" type="button">Load Map</button>
+      <button id="clearKeyBtn" type="button">Clear Saved Key</button>
+    </div>
+    <div id="apiError"></div>
+  </div>
+</div>
+
+<div id="reportPromptModal">
+  <div class="modalCard">
+    <h3>Simulation complete</h3>
+    <div class="small">The simulation cycle finished. View the report?</div>
+    <div class="topActions">
+      <button id="viewReportBtn" type="button">View Report</button>
+      <button id="skipReportBtn" type="button">Skip</button>
+    </div>
+  </div>
+</div>
+
+<div id="reportDrawerOverlay"></div>
+<div id="reportDrawer">
+  <div class="drawerHeader">
+    <strong>Cycle Report</strong>
+    <button id="closeDrawerBtn" type="button">Close</button>
+  </div>
+  <div class="drawerBody">
+    <div class="tabs">
+      <button class="tabBtn active" data-tab="schema">Schema</button>
+      <button class="tabBtn" data-tab="narrative">Narrative</button>
+    </div>
+    <div id="tab-schema" class="tabPane active"></div>
+    <div id="tab-narrative" class="tabPane"></div>
+  </div>
+</div>
+
+<script>
+const initialData = {{ sim_json|safe }};
+let map = null;
+let protectedPolygon = null;
+let vesselPolylines = [];
+let vesselMarkers = [];
+let infoWindows = [];
+let googleMapsLoading = false;
+let googleMapsLoaded = false;
+let playbackTimer = null;
+let centerAlertBlinkTimer = null;
+
+let currentData = initialData;
+let cycleLoggedRecordIds = new Set();
+let intruderStepState = "OUTSIDE";
+let submarineMarker = null;
+let currentStep = 0;
+let awaitingReportDecision = false;
+let anchorNow = new Date();
+let cycleCount = 0;
+let currentSchemaFocus = ["objects"];
+let latestEventRowId = null;
+
+let interceptorSurface = null;
+let interceptorAir = null;
+let interceptorLaunched = false;
+let interceptorConverged = false;
+let interceptorInboundLogged = false;
+let convergencePoint = null;
+let interceptFreezeStep = null;
+
+let interceptorBaseMarkers = [];
+let interceptorMarkers = [];
+let interceptorLines = [];
+let radarCircles = [];
+let radarSweepTimer = null;
+let convergenceMarker = null;
+
+function centerForData(data) {
+  let sumLon = 0, sumLat = 0, count = 0;
+  for (const arr of Object.values(data.tracks)) {
+    for (const p of arr) {
+      sumLon += p.lon;
+      sumLat += p.lat;
+      count += 1;
+    }
+  }
+  return { lat: sumLat / Math.max(count, 1), lng: sumLon / Math.max(count, 1) };
+}
+
+function boundsForData(data) {
+  const bounds = new google.maps.LatLngBounds();
+  for (const arr of Object.values(data.tracks)) {
+    for (const p of arr) bounds.extend({lat: p.lat, lng: p.lon});
+  }
+  for (const pt of data.protected_polygon) bounds.extend({lat: pt[1], lng: pt[0]});
+  if (data.interceptors) {
+    bounds.extend({lat: data.interceptors.surface_patrol.origin.lat, lng: data.interceptors.surface_patrol.origin.lon});
+    bounds.extend({lat: data.interceptors.air_asset.origin.lat, lng: data.interceptors.air_asset.origin.lon});
+  }
+  return bounds;
+}
+
+function clearMapObjects() {
+  if (protectedPolygon) protectedPolygon.setMap(null);
+  for (const poly of vesselPolylines) poly.setMap(null);
+  for (const marker of vesselMarkers) marker.setMap(null);
+  for (const iw of infoWindows) iw.close();
+  if (submarineMarker) submarineMarker.setMap(null);
+  if (convergenceMarker) convergenceMarker.setMap(null);
+  for (const m of interceptorBaseMarkers) m.setMap(null);
+  for (const m of interceptorMarkers) m.setMap(null);
+  for (const l of interceptorLines) l.setMap(null);
+  for (const c of radarCircles) c.setMap(null);
+  interceptorBaseMarkers = [];
+  interceptorMarkers = [];
+  interceptorLines = [];
+  radarCircles = [];
+  protectedPolygon = null;
+  vesselPolylines = [];
+  vesselMarkers = [];
+  infoWindows = [];
+  submarineMarker = null;
+  convergenceMarker = null;
+}
+
+function drawProtectedPolygon(data) {
+  protectedPolygon = new google.maps.Polygon({
+    paths: data.protected_polygon.map(pt => ({lng: pt[0], lat: pt[1]})),
+    strokeColor: "#cc2222",
+    strokeOpacity: 1.0,
+    strokeWeight: 3,
+    fillColor: "#cc2222",
+    fillOpacity: 0.08,
+    map
+  });
+}
+
+function drawTracks(data) {
+  const colorByVessel = {"vessel_01":"#ff8800","vessel_02":"#00aa55","vessel_03":"#2255ff"};
+  Object.entries(data.tracks).forEach(([vesselId, pts]) => {
+    const polyline = new google.maps.Polyline({
+      path: pts.map(p => ({lat: p.lat, lng: p.lon})),
+      geodesic: false, strokeColor: colorByVessel[vesselId], strokeOpacity: 0.8, strokeWeight: 3, map
+    });
+    vesselPolylines.push(polyline);
+  });
+}
+
+function interceptorSurfaceIcon() {
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52">
+        <path d="M8 30 L44 30 L38 38 L14 38 Z" fill="#6b7280" stroke="#ffffff" stroke-width="1.5"/>
+        <rect x="20" y="22" width="12" height="8" fill="#9ca3af" stroke="#ffffff" stroke-width="1"/>
+      </svg>
+    `),
+    scaledSize: new google.maps.Size(52, 52),
+    anchor: new google.maps.Point(26, 26)
+  };
+}
+
+function interceptorAirIcon() {
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
+        <text x="30" y="39" text-anchor="middle" font-size="32" fill="#7c3aed">✈</text>
+      </svg>
+    `),
+    scaledSize: new google.maps.Size(60, 60),
+    anchor: new google.maps.Point(30, 30)
+  };
+}
+
+function foreignBoatSymbol(color, rotation) {
+  return {
+    path: "M 0 -2 L 1.8 2 L 0 1.2 L -1.8 2 Z",
+    fillColor: color, fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 1.2,
+    rotation: rotation, scale: 5, anchor: new google.maps.Point(0, 0)
+  };
+}
+
+function drawInterceptorBases(data) {
+  const surfaceBasePos = { lat: data.interceptors.surface_patrol.origin.lat, lng: data.interceptors.surface_patrol.origin.lon };
+  const airBasePos = { lat: data.interceptors.air_asset.origin.lat, lng: data.interceptors.air_asset.origin.lon };
+
+  const surfaceBase = new google.maps.Marker({
+    position: surfaceBasePos,
+    map,
+    title: "USCG Station Golden Gate",
+    icon: {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="30" fill="white" fill-opacity="0.92" stroke="#6b7280" stroke-width="2"/>
+          <text x="32" y="41" text-anchor="middle" font-size="34">⚓</text>
+        </svg>
+      `),
+      scaledSize: new google.maps.Size(64, 64),
+      anchor: new google.maps.Point(32, 32)
+    },
+    zIndex: 8
+  });
+
+  const airBase = new google.maps.Marker({
+    position: airBasePos,
+    map,
+    title: "USCG Air Station San Francisco",
+    icon: {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="30" fill="white" fill-opacity="0.92" stroke="#7c3aed" stroke-width="2"/>
+          <text x="32" y="41" text-anchor="middle" font-size="34">🛫</text>
+        </svg>
+      `),
+      scaledSize: new google.maps.Size(64, 64),
+      anchor: new google.maps.Point(32, 32)
+    },
+    zIndex: 8
+  });
+
+  interceptorBaseMarkers.push(surfaceBase, airBase);
+
+  const surfaceRadar = new google.maps.Circle({
+    map, center: surfaceBasePos, radius: 4500,
+    strokeColor: "#6b7280", strokeOpacity: 0.65, strokeWeight: 2,
+    fillColor: "#9ca3af", fillOpacity: 0.07
+  });
+
+  const airRadar = new google.maps.Circle({
+    map, center: airBasePos, radius: 7500,
+    strokeColor: "#7c3aed", strokeOpacity: 0.65, strokeWeight: 2,
+    fillColor: "#a78bfa", fillOpacity: 0.05
+  });
+
+  radarCircles.push(surfaceRadar, airRadar);
+}
+
+function animateRadar() {
+  if (radarSweepTimer) clearInterval(radarSweepTimer);
+  radarSweepTimer = setInterval(() => {
+    if (radarCircles.length < 2) return;
+    const t = Date.now() / 1000;
+    radarCircles[0].setOptions({
+      radius: 3800 + 700 * (1 + Math.sin(t * 2.1)),
+      fillOpacity: 0.04 + 0.02 * (1 + Math.sin(t * 2.1))
+    });
+    radarCircles[1].setOptions({
+      radius: 6200 + 1000 * (1 + Math.sin(t * 1.5 + 0.7)),
+      fillOpacity: 0.03 + 0.02 * (1 + Math.sin(t * 1.5 + 0.7))
+    });
+  }, 150);
+}
+
+function headingForStep(pts, stepIndex) {
+  const a = pts[Math.max(0, Math.min(stepIndex, pts.length - 1))];
+  const b = pts[Math.max(0, Math.min(stepIndex + 1, pts.length - 1))];
+  return Math.atan2(b.lat - a.lat, b.lon - a.lon) * 180 / Math.PI;
+}
+
+function drawCurrentMarkers(data, stepIndex = null) {
+  for (const marker of vesselMarkers) marker.setMap(null);
+  for (const iw of infoWindows) iw.close();
+  vesselMarkers = [];
+  infoWindows = [];
+  const colorByVessel = {"vessel_01":"#ff8800","vessel_02":"#00aa55","vessel_03":"#2255ff"};
+
+  Object.entries(data.tracks).forEach(([vesselId, pts]) => {
+    let actualStep = stepIndex == null ? pts.length - 1 : Math.min(stepIndex, pts.length - 1);
+    if (vesselId === "vessel_02" && interceptorConverged && typeof interceptFreezeStep === "number") {
+      actualStep = Math.min(interceptFreezeStep, pts.length - 1);
+    }
+    const p = pts[actualStep];
+    const heading = headingForStep(pts, actualStep);
+    const marker = new google.maps.Marker({
+      position: {lat: p.lat, lng: p.lon}, map, title: vesselId,
+      icon: foreignBoatSymbol(colorByVessel[vesselId], heading), zIndex: 10
+    });
+    const iw = new google.maps.InfoWindow({
+      content: `<b>${vesselId}</b><br>State: ${p.state}<br>Time: ${formatDisplayDate(stepToDisplayDate(actualStep))}<br>Lat/Lon: ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`
+    });
+    marker.addListener("click", () => iw.open({anchor: marker, map}));
+    vesselMarkers.push(marker);
+    infoWindows.push(iw);
+  });
+
+  if (!submarineMarker && data.american_sub_position) {
+    submarineMarker = new google.maps.Marker({
+      position: {lng: data.american_sub_position[0], lat: data.american_sub_position[1]},
+      map, title: "American submarine", label: { text: "🔱", fontSize: "18px" }, zIndex: 40
+    });
+  }
+}
+
+function stepToDisplayDate(step) {
+  return new Date(anchorNow.getTime() + step * 10 * 60 * 1000);
+}
+
+function formatDisplayDate(date) {
+  return date.toLocaleString([], {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+}
+
+function updateCoordinateBox(data, step) {
+  const p1 = data.tracks["vessel_01"][Math.min(step, data.tracks["vessel_01"].length - 1)];
+  const p2 = data.tracks["vessel_02"][Math.min(step, data.tracks["vessel_02"].length - 1)];
+  const p3 = data.tracks["vessel_03"][Math.min(step, data.tracks["vessel_03"].length - 1)];
+
+  function format(v, color, highlight=false) {
+    return `
+      <div style="
+        color:${color};
+        font-size:${highlight ? "20px" : "18px"};
+        font-weight:${highlight ? "700" : "500"};
+      ">
+        <b>${v.id}</b>: ${v.lat.toFixed(4)}, ${v.lon.toFixed(4)} — ${v.state}
+      </div>
+    `;
+  }
+
+  const intruder = p2.state === "INSIDE";
+
+  document.getElementById("coordBox").innerHTML = `
+    <b style="font-size:20px;">Live Coordinates</b><br><br>
+    ${format({id:"vessel_01", ...p1}, "#ff8800")}
+    ${format({id:"vessel_02", ...p2}, "#00aa55", intruder)}
+    ${format({id:"vessel_03", ...p3}, "#2255ff")}
+  `;
+}
+
+
+function drawConvergenceMarker() {
+  if (!convergencePoint || !map) return;
+  if (convergenceMarker) convergenceMarker.setMap(null);
+
+  convergenceMarker = new google.maps.Marker({
+    position: convergencePoint,
+    map,
+    title: "Convergence point",
+    icon: {
+      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">
+          <text x="22" y="31" text-anchor="middle" font-size="30" font-weight="700" fill="#d00000">✕</text>
+        </svg>
+      `),
+      scaledSize: new google.maps.Size(44, 44),
+      anchor: new google.maps.Point(22, 22)
+    },
+    zIndex: 35
+  });
+}
+
+function clearResponseGraphics() {
+  for (const m of interceptorMarkers) m.setMap(null);
+  for (const l of interceptorLines) l.setMap(null);
+  interceptorMarkers = [];
+  interceptorLines = [];
+}
+
+function interpolatePoint(start, end, alpha) {
+  return {
+    lat: start.lat + (end.lat - start.lat) * alpha,
+    lng: start.lng + (end.lng - start.lng) * alpha
+  };
+}
+
+function spawnInterceptors(data) {
+  if (interceptorLaunched) return;
+  interceptorLaunched = true;
+  interceptorConverged = false;
+  interceptorInboundLogged = false;
+
+  const intruderTrack = data.tracks["vessel_02"];
+  let exitIndex = intruderTrack.length - 1;
+  for (let i = 1; i < intruderTrack.length; i++) {
+    if (intruderTrack[i - 1].state === "INSIDE" && intruderTrack[i].state === "OUTSIDE") {
+      exitIndex = i;
+      break;
+    }
+  }
+
+  convergencePoint = {
+    lat: intruderTrack[exitIndex].lat,
+    lng: intruderTrack[exitIndex].lon
+  };
+
+  interceptorSurface = {
+    id: data.interceptors.surface_patrol.id,
+    name: data.interceptors.surface_patrol.name,
+    start: { lat: data.interceptors.surface_patrol.origin.lat, lng: data.interceptors.surface_patrol.origin.lon },
+    current: { lat: data.interceptors.surface_patrol.origin.lat, lng: data.interceptors.surface_patrol.origin.lon }
+  };
+
+  interceptorAir = {
+    id: data.interceptors.air_asset.id,
+    name: data.interceptors.air_asset.name,
+    start: { lat: data.interceptors.air_asset.origin.lat, lng: data.interceptors.air_asset.origin.lon },
+    current: { lat: data.interceptors.air_asset.origin.lat, lng: data.interceptors.air_asset.origin.lon }
+  };
+}
+
+function updateInterceptors(data, step) {
+  clearResponseGraphics();
+  if (!interceptorLaunched || !convergencePoint) return;
+
+  const intruderTrack = data.tracks["vessel_02"];
+  let interceptStep = intruderTrack.length - 1;
+  for (let i = 1; i < intruderTrack.length; i++) {
+    if (intruderTrack[i - 1].state === "INSIDE" && intruderTrack[i].state === "OUTSIDE") {
+      interceptStep = i;
+      break;
+    }
+  }
+
+  const surfaceAlpha = Math.max(0, Math.min(1, step / Math.max(interceptStep, 1)));
+  const airAlpha = Math.max(0, Math.min(1, step / Math.max(interceptStep, 1)));
+
+  interceptorSurface.current = interpolatePoint(interceptorSurface.start, convergencePoint, surfaceAlpha);
+  interceptorAir.current = interpolatePoint(interceptorAir.start, convergencePoint, airAlpha);
+
+  const surfaceLine = new google.maps.Polyline({
+    path: [interceptorSurface.start, interceptorSurface.current],
+    geodesic: false, strokeColor: "#6b7280", strokeOpacity: 0.8, strokeWeight: 3, map
+  });
+  const airLine = new google.maps.Polyline({
+    path: [interceptorAir.start, interceptorAir.current],
+    geodesic: false, strokeColor: "#7c3aed", strokeOpacity: 0.8, strokeWeight: 3, map
+  });
+
+  const surfaceMarker = new google.maps.Marker({
+    position: interceptorSurface.current,
+    map,
+    title: interceptorSurface.name,
+    icon: interceptorSurfaceIcon(),
+    zIndex: 25
+  });
+  const airMarker = new google.maps.Marker({
+    position: interceptorAir.current,
+    map,
+    title: interceptorAir.name,
+    icon: interceptorAirIcon(),
+    zIndex: 26
+  });
+
+  interceptorLines.push(surfaceLine, airLine);
+  interceptorMarkers.push(surfaceMarker, airMarker);
+
+  if (!interceptorInboundLogged && surfaceAlpha >= 0.50) {
+    interceptorInboundLogged = true;
+    appendEventRecordRow({
+      record_id: "live_interceptor_inbound",
+      events: ["interceptor_inbound_event"],
+      objects: ["interceptor_surface_01", "interceptor_air_01", "vessel_02"],
+      _displayDate: formatDisplayDate(stepToDisplayDate(step)),
+      information: { interpretation: "Interceptors inbound" }
+    });
+  }
+
+  if (!interceptorConverged && surfaceAlpha >= 0.98 && airAlpha >= 0.98) {
+    interceptorConverged = true;
+    interceptFreezeStep = step;
+    hideCenterAlert();
+    showGreenAlert("INTERCEPT COMPLETE: vessel_02 contained");
+    appendEventRecordRow({
+      record_id: "live_interceptor_convergence",
+      events: ["interceptor_convergence_event"],
+      objects: ["interceptor_surface_01", "interceptor_air_01", "vessel_02"],
+      _displayDate: formatDisplayDate(stepToDisplayDate(step)),
+      information: { interpretation: "Interceptors converged" }
+    });
+    
+    appendEventRecordRow({
+      record_id: "live_no_engagement",
+      events: ["no_engagement_event"],
+      objects: ["vessel_02", "american_sub"],
+      _displayDate: formatDisplayDate(stepToDisplayDate(currentStep - 1)),
+      information: { interpretation: "No engagement — submarine unharmed" }
+    });
+
+    appendEventRecordRow({
+      record_id: "live_threat_contained",
+      events: ["threat_contained_event"],
+      objects: ["vessel_02", "interceptor_surface_01", "interceptor_air_01"],
+      _displayDate: formatDisplayDate(stepToDisplayDate(currentStep - 1)),
+      information: { interpretation: "Threat level: contained" }
+    });
+highlightEventRow("live_interceptor_convergence");
+    drawConvergenceMarker();
+  }
+}
+
+function loadDataIntoMap(data) {
+  if (!map || !googleMapsLoaded) return;
+  clearMapObjects();
+  drawProtectedPolygon(data);
+  drawTracks(data);
+  drawInterceptorBases(data);
+  drawCurrentMarkers(data, 0);
+  updateCoordinateBox(data, 0);
+  map.fitBounds(boundsForData(data));
+  google.maps.event.addListenerOnce(map, "idle", () => {
+    const z = map.getZoom();
+    if (z && z < 11) map.setZoom(z + 1);
+  });
+  animateRadar();
+
+  intruderStepState = "OUTSIDE";
+  cycleLoggedRecordIds = new Set();
+  latestEventRowId = null;
+  currentStep = 0;
+  interceptorSurface = null;
+  interceptorAir = null;
+  interceptorLaunched = false;
+  interceptorConverged = false;
+  interceptorInboundLogged = false;
+  convergencePoint = null;
+  interceptFreezeStep = null;
+  clearResponseGraphics();
+  document.querySelector("#eventTable tbody").innerHTML = "";
+}
+
+function shortenInterpretation(text) {
+  if (!text) return "";
+  if (text.includes("Track detected")) return "Track detected";
+  if (text.includes("Approach")) return "Approaching AOI";
+  if (text.includes("entered protected waters")) return "Entered AOI";
+  if (text.includes("exited protected waters")) return "Exited AOI";
+  if (text.includes("Surface patrol launched")) return "Surface patrol launched";
+  if (text.includes("Air asset launched")) return "Air asset launched";
+  if (text.includes("Interceptors inbound")) return "Interceptors inbound";
+  if (text.includes("Interceptors converged")) return "Interceptors converged";
+  if (text.includes("No engagement")) return "No engagement";
+  if (text.includes("Threat level")) return "Threat contained";
+  if (text.includes("No threat")) return "No incident";
+  return text.split(" ").slice(0, 4).join(" ");
+}
+
+function appendEventRecordRow(record) {
+  if (!record || cycleLoggedRecordIds.has(record.record_id)) return false;
+  cycleLoggedRecordIds.add(record.record_id);
+  latestEventRowId = record.record_id;
+
+  const tbody = document.querySelector("#eventTable tbody");
+  const tr = document.createElement("tr");
+  tr.dataset.recordId = record.record_id;
+  tr.dataset.objects = (record.objects || []).join(",");
+  tr.dataset.events = (record.events || []).join(",");
+
+  let displayDate;
+  if (record._displayDate) {
+    displayDate = record._displayDate;
+  } else if (record.time && record.time.chronometric && typeof record.time.chronometric.step === "number") {
+    displayDate = formatDisplayDate(stepToDisplayDate(record.time.chronometric.step));
+  } else {
+    displayDate = formatDisplayDate(stepToDisplayDate(0));
+  }
+
+  tr.innerHTML = `
+    <td>${record.record_id}</td>
+    <td>${(record.events || []).join(", ")}</td>
+    <td>${(record.objects || []).join(", ")}</td>
+    <td>${displayDate}</td>
+    <td>${shortenInterpretation(record.information && record.information.interpretation)}</td>
+  `;
+  tbody.appendChild(tr);
+  return true;
+}
+
+function appendInitialRows() {
+  const t0 = formatDisplayDate(stepToDisplayDate(0));
+  appendEventRecordRow({ record_id:"live_detect_01", events:["track_detected_event"], objects:["vessel_01"], _displayDate:t0, information:{interpretation:"Track detected"}});
+  appendEventRecordRow({ record_id:"live_detect_02", events:["track_detected_event"], objects:["vessel_02"], _displayDate:t0, information:{interpretation:"Track detected"}});
+  appendEventRecordRow({ record_id:"live_detect_03", events:["track_detected_event"], objects:["vessel_03"], _displayDate:t0, information:{interpretation:"Track detected"}});
+  appendEventRecordRow({ record_id:"live_approach_01", events:["approaching_aoi_event"], objects:["vessel_01"], _displayDate:t0, information:{interpretation:"Approach outside"}});
+  appendEventRecordRow({ record_id:"live_approach_02", events:["approaching_aoi_event"], objects:["vessel_02"], _displayDate:t0, information:{interpretation:"Approach AOI"}});
+  appendEventRecordRow({ record_id:"live_approach_03", events:["approaching_aoi_event"], objects:["vessel_03"], _displayDate:t0, information:{interpretation:"Approach outside"}});
+}
+
+function highlightEventRow(recordId) {
+  document.querySelectorAll("#eventTable tbody tr").forEach(tr => {
+    tr.classList.toggle("activeRow", tr.dataset.recordId === recordId);
+    tr.classList.remove("dimRow");
+  });
+}
+
+function highlightRowsByFilter(fn) {
+  document.querySelectorAll("#eventTable tbody tr").forEach(tr => {
+    const keep = fn(tr);
+    tr.classList.toggle("dimRow", !keep);
+    tr.classList.toggle("activeRow", keep);
+  });
+}
+
+function clearRowFilters() {
+  document.querySelectorAll("#eventTable tbody tr").forEach(tr => {
+    tr.classList.remove("dimRow");
+    tr.classList.remove("activeRow");
+  });
+}
+
+function schemaHtml() {
+  return `
+    <div class="schemaGrid">
+      <div class="schemaRowInteractive" id="schema-row-objects" data-link="objects">
+        <div class="schemaLabel"><b>Objects</b></div>
+        <div class="schemaValue">vessel_01, vessel_02, vessel_03, protected_waters_01, American submarine marker, interceptor_surface_01, interceptor_air_01, convergence_point</div>
+      </div>
+      <div class="schemaRowInteractive" id="schema-row-agents" data-link="agents">
+        <div class="schemaLabel"><b>Agents</b></div>
+        <div class="schemaValue">foreign vessels, monitoring system, Station Golden Gate response crew, Air Station San Francisco MH-65 crew</div>
+      </div>
+      <div class="schemaRowInteractive" id="schema-row-events" data-link="events">
+        <div class="schemaLabel"><b>Events</b></div>
+        <div class="schemaValue">detection, approach, breach, response launch, inbound pursuit, exit, convergence</div>
+      </div>
+      <div class="schemaRowInteractive" id="schema-row-structure" data-link="structure">
+        <div class="schemaLabel"><b>Structure</b></div>
+        <div class="schemaValue">protected waters AOI, maritime approach corridors, north surface patrol path, south air-response path, convergence endpoint</div>
+      </div>
+      <div class="schemaRowInteractive" id="schema-row-information" data-link="information">
+        <div class="schemaLabel"><b>Information</b></div>
+        <div class="schemaValue">vessel_02 breached the AOI and triggered a two-axis Coast Guard-style response that converged near the final trajectory point</div>
+      </div>
+    </div>
+  `;
+}
+
+function narrativeHtml() {
+  return `<p>Three foreign vessels were detected near the protected waters area. Vessel_01 and vessel_03 remained outside the zone. Vessel_02 entered the AOI, triggering a response by a surface boat from Station Golden Gate and an MH-65 helicopter from Air Station San Francisco. Both interceptors moved on the intruder track and converged as vessel_02 reached the outside edge of the restricted zone.</p>`;
+}
+
+function renderReportDrawerContent() {
+  document.getElementById("tab-schema").innerHTML = schemaHtml();
+  document.getElementById("tab-narrative").innerHTML = narrativeHtml();
+  applySchemaFocus(currentSchemaFocus, false);
+  bindSchemaRowLinks();
+}
+
+function bindSchemaRowLinks() {
+  document.querySelectorAll(".schemaRowInteractive").forEach(row => {
+    row.addEventListener("click", () => {
+      const key = row.dataset.link;
+      if (key === "objects") {
+        highlightRowsByFilter(tr => tr.dataset.objects.includes("vessel_02") || tr.dataset.objects.includes("interceptor_"));
+      } else if (key === "events") {
+        highlightRowsByFilter(tr => tr.dataset.events.includes("zone_entry_event") || tr.dataset.events.includes("interceptor"));
+      } else {
+        clearRowFilters();
+      }
+    });
+  });
+}
+
+function applySchemaFocus(keys, pulse=true) {
+  const all = ["objects","agents","events","structure","information"];
+  all.forEach(k => {
+    const row = document.getElementById(`schema-row-${k}`);
+    if (!row) return;
+    row.classList.toggle("schemaFocus", keys.includes(k));
+    row.classList.remove("schemaPulse");
+    if (pulse && keys.includes(k)) {
+      void row.offsetWidth;
+      row.classList.add("schemaPulse");
+    }
+  });
+  currentSchemaFocus = keys;
+}
+
+function populateSummary(data) {
+  document.getElementById("summary").innerHTML = `
+    <p><b>Anchor datetime:</b> ${formatDisplayDate(anchorNow)}</p>
+    <p><b>Approaching vessels:</b> 3</p>
+    <p><b>AOI intruder:</b> vessel_02</p>
+    <p><b>Response assets:</b> Station Golden Gate boat + Air Station San Francisco MH-65</p>
+  `;
+  document.getElementById("trace").textContent =
+`Objects: vessels + AOI + submarine + interceptors
+Agents: intruder, monitoring system, surface patrol, air asset
+Events: detect, approach, breach, launch, inbound pursuit, exit, convergence
+Structure: protected waters polygon + response corridors
+Information: a two-axis response closes on the intruder after AOI breach`;
+}
+
+function showCenterAlert(text) {
+  const el = document.getElementById("centerAlert");
+  el.textContent = text;
+  el.style.display = "block";
+
+  if (centerAlertBlinkTimer) clearInterval(centerAlertBlinkTimer);
+  el.classList.remove("alertFlashOff");
+  el.classList.add("alertFlashOn");
+
+  centerAlertBlinkTimer = setInterval(() => {
+    if (el.classList.contains("alertFlashOn")) {
+      el.classList.remove("alertFlashOn");
+      el.classList.add("alertFlashOff");
+    } else {
+      el.classList.remove("alertFlashOff");
+      el.classList.add("alertFlashOn");
+    }
+  }, 350);
+}
+
+function hideCenterAlert() {
+  const el = document.getElementById("centerAlert");
+  if (centerAlertBlinkTimer) {
+    clearInterval(centerAlertBlinkTimer);
+    centerAlertBlinkTimer = null;
+  }
+  el.classList.remove("alertFlashOn", "alertFlashOff", "alertGreenOn", "alertGreenOff");
+  el.style.display = "none";
+  el.textContent = "";
+}
+
+function showGreenAlert(text) {
+  const el = document.getElementById("centerAlert");
+  el.textContent = text;
+  el.style.display = "block";
+
+  if (centerAlertBlinkTimer) clearInterval(centerAlertBlinkTimer);
+
+  el.classList.remove("alertFlashOn", "alertFlashOff", "alertGreenOff");
+  el.classList.add("alertGreenOn");
+
+  centerAlertBlinkTimer = setInterval(() => {
+    if (el.classList.contains("alertGreenOn")) {
+      el.classList.remove("alertGreenOn");
+      el.classList.add("alertGreenOff");
+    } else {
+      el.classList.remove("alertGreenOff");
+      el.classList.add("alertGreenOn");
+    }
+  }, 300);
+}
+
+function fetchRecordForStep(data, vesselId, eventType, step) {
+  return data.records.find(r =>
+    (r.objects || []).includes(vesselId) &&
+    (r.events || []).includes(eventType) &&
+    r.time && r.time.chronometric && r.time.chronometric.step === step
+  );
+}
+
+function scheduleNextTick(ms, fn) {
+  if (playbackTimer) clearTimeout(playbackTimer);
+  playbackTimer = setTimeout(fn, ms);
+}
+
+function showReportPrompt() { document.getElementById("reportPromptModal").style.display = "flex"; }
+function hideReportPrompt() { document.getElementById("reportPromptModal").style.display = "none"; }
+
+function openDrawer() {
+  renderReportDrawerContent();
+  document.getElementById("reportDrawerOverlay").style.display = "block";
+  document.getElementById("reportDrawer").classList.add("open");
+}
+function closeDrawer() {
+  document.getElementById("reportDrawerOverlay").style.display = "none";
+  document.getElementById("reportDrawer").classList.remove("open");
+}
+
+function continueAfterReport() {
+  awaitingReportDecision = false;
+  hideReportPrompt();
+  closeDrawer();
+  clearRowFilters();
+  cycleCount += 1;
+  anchorNow = new Date();
+  populateSummary(currentData);
+  currentStep = 0;
+  intruderStepState = "OUTSIDE";
+  interceptorSurface = null;
+  interceptorAir = null;
+  interceptorLaunched = false;
+  interceptorConverged = false;
+  interceptorInboundLogged = false;
+  convergencePoint = null;
+  clearResponseGraphics();
+
+  if (convergenceMarker) {
+    convergenceMarker.setMap(null);
+    convergenceMarker = null;
+  }
+
+  scheduleNextTick(300, () => play(currentData));
+}
+
+function play(data) {
+  if (!googleMapsLoaded || !map || awaitingReportDecision) return;
+  currentData = data;
+  const baseDelay = parseInt(document.getElementById("playbackMs").value, 10);
+
+  function finishCycle() {
+    if (!interceptorConverged && interceptorLaunched) {
+      appendEventRecordRow({
+        record_id: "live_interceptor_convergence",
+        events: ["interceptor_convergence_event"],
+        objects: ["interceptor_surface_01", "interceptor_air_01", "vessel_02"],
+        _displayDate: formatDisplayDate(stepToDisplayDate(currentStep - 1)),
+        information: { interpretation: "Interceptors converged" }
+      });
+      drawConvergenceMarker();
+      showGreenAlert("INTERCEPT COMPLETE: vessel_02 contained");
+    }
+
+    appendEventRecordRow({
+      record_id: "live_clear_01",
+      events: ["no_incident_event"],
+      objects: ["vessel_01"],
+      _displayDate: formatDisplayDate(stepToDisplayDate(currentStep - 1)),
+      information: { interpretation: "No threat — passed outside AOI" }
+    });
+
+    appendEventRecordRow({
+      record_id: "live_clear_03",
+      events: ["no_incident_event"],
+      objects: ["vessel_03"],
+      _displayDate: formatDisplayDate(stepToDisplayDate(currentStep - 1)),
+      information: { interpretation: "No threat — passed outside AOI" }
+    });
+
+    awaitingReportDecision = true;
+    showReportPrompt();
+  }
+
+  function tick() {
+    if (awaitingReportDecision) return;
+
+    drawCurrentMarkers(data, currentStep);
+    updateCoordinateBox(data, currentStep);
+    updateInterceptors(data, currentStep);
+
+    if (currentStep === 0) {
+      document.querySelector("#eventTable tbody").innerHTML = "";
+      cycleLoggedRecordIds = new Set();
+      latestEventRowId = null;
+      hideCenterAlert();
+      clearRowFilters();
+      appendInitialRows();
+      applySchemaFocus(["objects"], true);
+      currentStep += 1;
+      scheduleNextTick(450, tick);
+      return;
+    }
+
+    const maxSteps = Math.max(...Object.values(data.tracks).map(arr => arr.length));
+    const intruderTrack = data.tracks["vessel_02"];
+
+    if (interceptorConverged) {
+      currentStep += 1;
+      if (currentStep >= maxSteps) {
+        finishCycle();
+        return;
+      }
+      scheduleNextTick(baseDelay, tick);
+      return;
+    }
+
+    if (intruderTrack && currentStep < intruderTrack.length) {
+      const point = intruderTrack[currentStep];
+      const prevState = intruderStepState || "OUTSIDE";
+
+      if (prevState === "OUTSIDE" && point.state === "INSIDE") {
+        const entryRecord = fetchRecordForStep(data, "vessel_02", "zone_entry_event", point.step);
+        showCenterAlert(`ALERT: vessel_02 breached the AOI at ${formatDisplayDate(stepToDisplayDate(point.step))}`);
+        if (entryRecord) {
+          appendEventRecordRow(entryRecord);
+          highlightEventRow(entryRecord.record_id);
+        }
+        spawnInterceptors(data);
+        appendEventRecordRow({
+          record_id: "live_surface_launch",
+          events: ["interceptor_launch_event"],
+          objects: ["interceptor_surface_01"],
+          _displayDate: formatDisplayDate(stepToDisplayDate(point.step)),
+          information: { interpretation: "Surface patrol launched" }
+        });
+        appendEventRecordRow({
+          record_id: "live_air_launch",
+          events: ["interceptor_launch_event"],
+          objects: ["interceptor_air_01"],
+          _displayDate: formatDisplayDate(stepToDisplayDate(point.step)),
+          information: { interpretation: "Air asset launched" }
+        });
+        applySchemaFocus(["events","structure","information"], true);
+        intruderStepState = "INSIDE";
+        currentStep += 1;
+        scheduleNextTick(700, tick);
+        return;
+      }
+
+      if (point.state === "INSIDE") {
+        showCenterAlert(`ALERT ACTIVE: vessel_02 remains inside the AOI`);
+        applySchemaFocus(["events","structure"], false);
+      }
+
+      if (prevState === "INSIDE" && point.state === "OUTSIDE") {
+        const exitRecord = fetchRecordForStep(data, "vessel_02", "zone_exit_event", point.step);
+        hideCenterAlert();
+        if (exitRecord) {
+          appendEventRecordRow(exitRecord);
+          highlightEventRow(exitRecord.record_id);
+        }
+        applySchemaFocus(["events","information"], true);
+        intruderStepState = "OUTSIDE";
+        currentStep += 1;
+        scheduleNextTick(650, tick);
+        return;
+      }
+
+      intruderStepState = point.state;
+    }
+
+    currentStep += 1;
+
+    if (currentStep >= maxSteps) {
+      finishCycle();
+      return;
+    }
+
+    scheduleNextTick(baseDelay, tick);
+  }
+
+  if (playbackTimer) clearTimeout(playbackTimer);
+  tick();
+}
+
+function showApiModal(message = "") {
+  document.getElementById("apiModal").style.display = "flex";
+  document.getElementById("apiError").textContent = message;
+}
+function hideApiModal() {
+  document.getElementById("apiModal").style.display = "none";
+  document.getElementById("apiError").textContent = "";
+}
+function clearSavedKey() {
+  localStorage.removeItem("google_maps_api_key");
+  document.getElementById("apiKeyInput").value = "";
+  showApiModal("Saved key cleared. Enter a new key.");
+}
+
+function loadGoogleMaps(apiKey) {
+  if (googleMapsLoading || googleMapsLoaded) return;
+  googleMapsLoading = true;
+  const old = document.getElementById("googleMapsScript");
+  if (old) old.remove();
+
+  const script = document.createElement("script");
+  script.id = "googleMapsScript";
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=initGoogleMap`;
+  script.async = true;
+  script.defer = true;
+  script.onerror = () => {
+    googleMapsLoading = false;
+    showApiModal("Failed to load Google Maps. Check your key or network connection.");
+  };
+  document.head.appendChild(script);
+
+  setTimeout(() => {
+    if (!googleMapsLoaded) {
+      googleMapsLoading = false;
+      showApiModal("Google Maps did not initialize. Check that the key is valid and enabled for Maps JavaScript API.");
+    }
+  }, 6000);
+}
+
+function saveApiKey() {
+  const key = document.getElementById("apiKeyInput").value.trim();
+  if (!key) {
+    showApiModal("Please enter a valid API key.");
+    return;
+  }
+  localStorage.setItem("google_maps_api_key", key);
+  hideApiModal();
+  loadGoogleMaps(key);
+}
+
+function initGoogleMap() {
+  googleMapsLoading = false;
+  googleMapsLoaded = true;
+  hideApiModal();
+
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: centerForData(initialData),
+    zoom: 11,
+    mapTypeId: "terrain",
+    zoomControl: true,
+    fullscreenControl: true
+  });
+
+  loadDataIntoMap(initialData);
+  populateSummary(initialData);
+  play(initialData);
+}
+
+function resetView() {
+  if (!map) return;
+  map.fitBounds(boundsForData(currentData));
+  google.maps.event.addListenerOnce(map, "idle", () => {
+    const z = map.getZoom();
+    if (z && z < 11) map.setZoom(z + 1);
+  });
+}
+
+window.initGoogleMap = initGoogleMap;
+
+document.getElementById("loadMapBtn").addEventListener("click", saveApiKey);
+document.getElementById("clearKeyBtn").addEventListener("click", clearSavedKey);
+document.getElementById("changeKeyBtn").addEventListener("click", () => {
+  googleMapsLoaded = false;
+  googleMapsLoading = false;
+  showApiModal("Enter a new key to reload the map.");
+});
+document.getElementById("resetViewBtn").addEventListener("click", resetView);
+document.getElementById("viewReportBtn").addEventListener("click", () => { hideReportPrompt(); openDrawer(); });
+document.getElementById("skipReportBtn").addEventListener("click", continueAfterReport);
+document.getElementById("closeDrawerBtn").addEventListener("click", continueAfterReport);
+document.getElementById("reportDrawerOverlay").addEventListener("click", continueAfterReport);
+
+document.querySelectorAll(".tabBtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tabBtn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tabPane").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+  });
+});
+
+document.getElementById("playbackMs").addEventListener("change", () => {
+  if (googleMapsLoaded && !awaitingReportDecision) {
+    populateSummary(currentData);
+    play(currentData);
+  }
+});
+
+window.addEventListener("load", () => {
+  anchorNow = new Date();
+  populateSummary(initialData);
+  const savedKey = localStorage.getItem("google_maps_api_key");
+  if (savedKey) {
+    document.getElementById("apiKeyInput").value = savedKey;
+    hideApiModal();
+    loadGoogleMaps(savedKey);
+  } else {
+    showApiModal("Enter your Google Maps API key to initialize the map.");
+  }
+});
+
+window.addEventListener("beforeunload", () => {
+  if (playbackTimer) clearTimeout(playbackTimer);
+  if (centerAlertBlinkTimer) clearInterval(centerAlertBlinkTimer);
+  if (radarSweepTimer) clearInterval(radarSweepTimer);
+});
+</script>
+</body>
+</html>
