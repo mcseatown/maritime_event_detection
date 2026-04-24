@@ -1,4 +1,4 @@
-# Maritime Threat Detection Near Protected Waters
+# Maritime Event Detection Near Protected Waters
 
 ![](./maritime_event.gif)
 
