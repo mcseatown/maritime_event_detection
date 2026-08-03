@@ -4,6 +4,18 @@
 
 ## Overview
 
+(From [LinkedIn](https://lnkd.in/p/gAB99VeC)) A Maritime Threat Detection demo. 
+
+Why? It was a weekend project that centered around 5 pillars of system understanding: objects, agents, events, structures, and information.
+
+This is a simplified version. Originally it would dynamically generate new scenarios after each simulation cycle, but it became too unwieldy on my old-azz computer. There was an entire offline mapping layer dedicated to identifying coastlines, but it was just too much code.
+
+This version tracks vessels, flags intrusions into restricted zones, dispatches interceptors from the nearest coastal sites, and generates a report from event logs. You can tweak this template to taste. It uses Google Maps for the sake of simplicity.
+
+Most of my personal data work has no connection to the military, (in fact it usually centers around humanitarian aid), but feel like mentioning that I’ve used LLMs to simulate historical battles, watching them unfold across maps, and it is fascinating to see those animated data points.
+
+More broadly, my most recent work focuses on situational intelligence: combining multimodal inputs (text, images/video, audio) and their extractions to build systems that detect events and provide deeper context, usually through reasoning and knowledge guidance.
+
 This project simulates maritime detection and response activity on a live map. Vessels are tracked as they move through their environment. When a vessel enters a protected area of interest (AOI), the system triggers an alert and sends interceptors from the nearest coastal installations to converge with the intruder. The app also records events and produces a report from the generated logs.
 
 This version is intentionally simplified. Think of it like your starter template.
