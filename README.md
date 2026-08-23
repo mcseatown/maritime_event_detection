@@ -34,7 +34,7 @@ This version is intentionally simplified. Think of it like your starter template
 
 ## Why this exists
 
-This app is part of a broader body of work around situational intelligence: building systems that combine event detection, reasoning, and contextual interpretation across modalities.
+This app is part of a broader body of work around situational intelligence. Building systems that combine event detection, reasoning, and contextual interpretation across modalities.
 
 ## Beta Notes
 
