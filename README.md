@@ -53,14 +53,7 @@ This is a demo.
 
 ## Getting Started
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git
-cd YOUR-REPO-NAME
-```
-
-### 2. Create or activate a virtual environment
+### 1. Create or activate a virtual environment
 
 **macOS & Linux**
 
@@ -78,13 +71,13 @@ venv\Scripts\Activate.ps1
 
 > You should see your shell prefixed with `(venv)` once activated.
 
-### 3. Install dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Run the app
+### 3. Run the app
 
 ```bash
 python app.py
